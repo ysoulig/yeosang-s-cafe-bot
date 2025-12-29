@@ -6,12 +6,12 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
     .then(() => console.log('✅ Connected to MongoDB Cafe Database'))
     .catch(err => console.error('❌ Database connection error:', err));
 
-// Define what a "Card" looks like in the database
 const CardSchema = new mongoose.Schema({
     name: String,
     group: String,
     rarity: String,
-    image: String
+    code: String, // NEW: The unique ID like ATZYS#001
+    image: String 
 });
 const Card = mongoose.model('Card', CardSchema);
 
@@ -19,19 +19,17 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // --- 2. REGISTER COMMANDS ---
 const commands = [
-    { 
-        name: 'drop', 
-        description: 'Order a 3-item card drop!' 
-    },
+    { name: 'drop', description: 'Order a 3-item card drop!' },
     {
         name: 'addcard',
         description: 'STAFF ONLY: Add a new card to the cafe',
         default_member_permissions: PermissionFlagsBits.Administrator.toString(),
         options: [
+            { name: 'code', description: 'Unique code (e.g. ATZYS#001)', type: 3, required: true }, // NEW
             { name: 'name', description: 'Idol name', type: 3, required: true },
             { name: 'group', description: 'Group name', type: 3, required: true },
-            { name: 'rarity', description: 'Rarity (Common, Rare, etc)', type: 3, required: true },
-            { name: 'image', description: 'Direct image URL', type: 3, required: true }
+            { name: 'rarity', description: 'Paste your rarity emoji here!', type: 3, required: true },
+            { name: 'image', description: 'Upload the card image file', type: 11, required: true }
         ]
     }
 ];
@@ -48,22 +46,22 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // STAFF COMMAND: /addcard
     if (interaction.commandName === 'addcard') {
+        const code = interaction.options.getString('code').toUpperCase(); // Forces uppercase
         const name = interaction.options.getString('name');
         const group = interaction.options.getString('group');
         const rarity = interaction.options.getString('rarity');
-        const image = interaction.options.getString('image');
+        const imageFile = interaction.options.getAttachment('image');
 
-        const newCard = new Card({ name, group, rarity, image });
+        const newCard = new Card({ code, name, group, rarity, image: imageFile.url });
+
         await newCard.save();
-        await interaction.reply({ content: `✅ Added **${name}** from **${group}** to the database!`, ephemeral: true });
+        await interaction.reply({ content: `✅ Added **[${code}]** ${name} from **${group}**!`, ephemeral: true });
     }
 
-    // USER COMMAND: /drop
     if (interaction.commandName === 'drop') {
         const allCards = await Card.find();
-        if (allCards.length < 3) return interaction.reply("Not enough cards in the cafe yet! Ask staff to add more.");
+        if (allCards.length < 3) return interaction.reply("Not enough cards yet!");
 
         const droppedItems = allCards.sort(() => 0.5 - Math.random()).slice(0, 3);
 
@@ -71,10 +69,11 @@ client.on('interactionCreate', async interaction => {
             .setTitle('☕ New Cafe Order!')
             .setDescription(`${interaction.user.username} dropped 3 items!`)
             .addFields(
-                { name: 'Item 1', value: `${droppedItems[0].name} (${droppedItems[0].rarity})`, inline: true },
-                { name: 'Item 2', value: `${droppedItems[1].name} (${droppedItems[1].rarity})`, inline: true },
-                { name: 'Item 3', value: `${droppedItems[2].name} (${droppedItems[2].rarity})`, inline: true }
+                { name: 'Item 1', value: `\`${droppedItems[0].code}\`\n${droppedItems[0].rarity} ${droppedItems[0].name}`, inline: true },
+                { name: 'Item 2', value: `\`${droppedItems[1].code}\`\n${droppedItems[1].rarity} ${droppedItems[1].name}`, inline: true },
+                { name: 'Item 3', value: `\`${droppedItems[2].code}\`\n${droppedItems[2].rarity} ${droppedItems[2].name}`, inline: true }
             )
+            .setImage(droppedItems[0].image) // Preview of the first card
             .setColor('#D2B48C');
 
         const buttons = new ActionRowBuilder().addComponents(
