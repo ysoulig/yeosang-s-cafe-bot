@@ -1,25 +1,44 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 
-// This creates the connection to Discord
-const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent
-    ] 
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+// 1. Define your slash commands here
+const commands = [
+  {
+    name: 'cafe',
+    description: 'Welcome to Yeosang’s Cafe!',
+  },
+  {
+    name: 'bias',
+    description: 'Get a random photo of a member (Coming soon!)',
+  }
+];
+
+// 2. This part registers the commands with Discord
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+(async () => {
+  try {
+    console.log('Started refreshing application (/) commands.');
+    // This updates the commands for EVERY server your bot is in
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    console.log('Successfully reloaded application (/) commands.');
+  } catch (error) {
+    console.error(error);
+  }
+})();
+
+// 3. This tells the bot what to do when someone uses a command
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'cafe') {
+    await interaction.reply('☕ Welcome to **Yeosang’s Cafe**! What can I get for you today?');
+  }
 });
 
-// This message shows up in your Railway logs when the bot turns on
 client.once('ready', () => {
-    console.log('✅ Yeosang Cafe Bot is now online!');
+  console.log(`✅ Logged in as ${client.user.tag}!`);
 });
 
-// This is a simple test command: type !hello in your server
-client.on('messageCreate', (message) => {
-    if (message.content === '!hello') {
-        message.reply('Welcome to Yeosang’s Cafe! ☕');
-    }
-});
-
-// THIS IS THE KEY: It uses the Variable you added to Railway
 client.login(process.env.DISCORD_TOKEN);
