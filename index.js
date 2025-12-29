@@ -3,12 +3,15 @@ const mongoose = require('mongoose');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// --- 1. CONNECT TO DATABASE (With Safety Net) ---
-mongoose.connect(process.env.MONGO_URI, { 
-    serverSelectionTimeoutMS: 5000 // Give up after 5 seconds instead of hanging forever
-})
-.then(() => console.log('✅ Connected to MongoDB'))
-.catch(err => console.error('❌ DATABASE ERROR:', err.message));
+// --- 1. CONNECTION (STABILITY MODE) ---
+const dbOptions = {
+    connectTimeoutMS: 10000,
+    family: 4, // Forces IPv4 (Fixes many Railway errors)
+};
+
+mongoose.connect(process.env.MONGO_URI, dbOptions)
+    .then(() => console.log('✅ DATABASE CONNECTED'))
+    .catch(err => console.error('❌ DATABASE ERROR:', err.message));
 
 const CardSchema = new mongoose.Schema({
     code: String, name: String, group: String, rarity: String, image: String 
@@ -37,17 +40,20 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
         console.log('✅ Commands Synced');
-    } catch (e) { console.error('❌ Command Sync Error:', e); }
+    } catch (e) { console.error(e); }
 })();
 
 // --- 3. THE HANDLER ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // ADD CARD COMMAND
     if (interaction.commandName === 'addcard') {
-        // This 'defer' tells Discord "I am working on it, don't time out!"
         await interaction.deferReply({ ephemeral: true });
+
+        // If not connected, stop early
+        if (mongoose.connection.readyState !== 1) {
+            return interaction.editReply("❌ Still connecting to database... please wait 10 seconds and try again.");
+        }
 
         try {
             const code = interaction.options.getString('code').toUpperCase();
@@ -61,18 +67,15 @@ client.on('interactionCreate', async interaction => {
             
             await interaction.editReply(`✅ Successfully added **[${code}] ${name}**!`);
         } catch (error) {
-            console.error(error);
-            await interaction.editReply(`❌ Database is acting up! Check Railway logs. Error: ${error.message}`);
+            await interaction.editReply(`❌ Error: ${error.message}`);
         }
     }
 
-    // DROP COMMAND
     if (interaction.commandName === 'drop') {
         try {
             const allCards = await Card.find();
-            if (allCards.length < 1) return interaction.reply("The cafe is empty! Add cards first.");
+            if (allCards.length < 1) return interaction.reply("The cafe is empty!");
             
-            // Simple drop logic for now
             const card = allCards[Math.floor(Math.random() * allCards.length)];
             const embed = new EmbedBuilder()
                 .setTitle("☕ Cafe Drop")
@@ -82,7 +85,7 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.reply({ embeds: [embed] });
         } catch (e) {
-            await interaction.reply("❌ Database error during drop.");
+            interaction.reply("❌ Database is currently offline.");
         }
     }
 });
