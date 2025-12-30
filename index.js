@@ -4,19 +4,21 @@ const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// --- DATA SETUP ---
+// --- 1. DATA SETUP ---
 const DATA_DIR = './data'; 
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 const INV_FILE = path.join(DATA_DIR, 'inventories.json');
 
 const readJSON = (file) => {
     try { 
         if (!fs.existsSync(file)) return file.includes('inventories') ? {} : [];
-        return JSON.parse(fs.readFileSync(file, 'utf8')); 
+        const data = fs.readFileSync(file, 'utf8');
+        return data ? JSON.parse(data) : (file.includes('inventories') ? {} : []);
     } catch (e) { return file.includes('inventories') ? {} : []; }
 };
 
-// --- 2. EMOJIS (Fixed with full <:name:ID> format) ---
+// --- 2. EMOJIS (Full Render Format) ---
 const EMOJIS = {
     COMPUTER: '<:YS_COMPUTER:1444114271901450412>',
     BEAN: '<:YS_COFFEEBEAN:1394451580312490035>',
@@ -29,27 +31,29 @@ const EMOJIS = {
     }
 };
 
+// --- 3. BOT LOGIC ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // --- DROP COMMAND ---
     if (interaction.commandName === 'drop') {
         const cards = readJSON(CARDS_FILE);
         if (cards.length < 3) return interaction.reply("Add more cards first!");
 
-        await interaction.deferReply();
+        await interaction.deferReply(); // STOPS "NOT RESPONDING"
+
         const selected = cards.sort(() => 0.5 - Math.random()).slice(0, 3);
 
-        // This creates the "3-column" text layout above the image
         const embed = new EmbedBuilder()
             .setAuthor({ name: `${interaction.user.username} is dropping cards...`, iconURL: interaction.user.displayAvatarURL() })
             .setColor('#D2B48C')
             .addFields(
-                { name: 'Slot 1', value: `${EMOJIS.RARITY[selected[0].rarity] || '❓'}\n\`${selected[0].code}\``, inline: true },
-                { name: 'Slot 2', value: `${EMOJIS.RARITY[selected[1].rarity] || '❓'}\n\`${selected[1].code}\``, inline: true },
-                { name: 'Slot 3', value: `${EMOJIS.RARITY[selected[2].rarity] || '❓'}\n\`${selected[2].code}\``, inline: true }
+                { name: 'Slot 1', value: `${EMOJIS.RARITY[selected[0].rarity] || '❓'}`, inline: true },
+                { name: 'Slot 2', value: `${EMOJIS.RARITY[selected[1].rarity] || '❓'}`, inline: true },
+                { name: 'Slot 3', value: `${EMOJIS.RARITY[selected[2].rarity] || '❓'}`, inline: true }
             )
-            .setImage(selected[0].image) // Preview of the first card
-            .setFooter({ text: 'Click the buttons below to claim!' });
+            .setImage(selected[0].image) // Preview image
+            .setFooter({ text: 'The image shows Slot 1' });
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('claim_0').setLabel('1').setStyle(ButtonStyle.Secondary),
@@ -80,7 +84,6 @@ client.on('interactionCreate', async interaction => {
         });
 
         collector.on('end', async () => {
-            // THE AFTER-DROP LAYOUT
             const finalResults = selected.map((card, idx) => {
                 const claimer = claims[idx] ? `<@${claims[idx].id}>` : "*Expired*";
                 const emoji = EMOJIS.RARITY[card.rarity] || '❓';
@@ -90,6 +93,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ content: finalResults, embeds: [], components: [] });
         });
     }
-});
 
-client.login(process.env.DISCORD_TOKEN);
+    // --- ADD CARD ---
+    if (interaction.commandName
