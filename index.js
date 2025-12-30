@@ -18,7 +18,7 @@ const readJSON = (file) => {
     } catch (e) { return file.includes('inventories') ? {} : []; }
 };
 
-// --- 2. EMOJIS (Full Render Format) ---
+// --- 2. EMOJIS (Rendered as Pictures) ---
 const EMOJIS = {
     COMPUTER: '<:YS_COMPUTER:1444114271901450412>',
     BEAN: '<:YS_COFFEEBEAN:1394451580312490035>',
@@ -40,7 +40,7 @@ client.on('interactionCreate', async interaction => {
         const cards = readJSON(CARDS_FILE);
         if (cards.length < 3) return interaction.reply("Add more cards first!");
 
-        await interaction.deferReply(); // STOPS "NOT RESPONDING"
+        await interaction.deferReply(); // STOPS "APPLICATION DID NOT RESPOND"
 
         const selected = cards.sort(() => 0.5 - Math.random()).slice(0, 3);
 
@@ -52,8 +52,8 @@ client.on('interactionCreate', async interaction => {
                 { name: 'Slot 2', value: `${EMOJIS.RARITY[selected[1].rarity] || '❓'}`, inline: true },
                 { name: 'Slot 3', value: `${EMOJIS.RARITY[selected[2].rarity] || '❓'}`, inline: true }
             )
-            .setImage(selected[0].image) // Preview image
-            .setFooter({ text: 'The image shows Slot 1' });
+            .setImage(selected[0].image) // Preview of the first card
+            .setFooter({ text: 'Previewing Slot 1 • 15 seconds to claim!' });
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('claim_0').setLabel('1').setStyle(ButtonStyle.Secondary),
@@ -94,5 +94,55 @@ client.on('interactionCreate', async interaction => {
         });
     }
 
+    // --- INVENTORY COMMAND ---
+    if (interaction.commandName === 'inventory') {
+        await interaction.deferReply();
+        const inv = readJSON(INV_FILE);
+        const userCards = inv[interaction.user.id] || [];
+        if (userCards.length === 0) return interaction.editReply("Your bag is empty! ☕");
+
+        let page = 0;
+        const perPage = 10;
+        const totalPages = Math.ceil(userCards.length / perPage);
+
+        const generateEmbed = (p) => {
+            const start = p * perPage;
+            const list = userCards.slice(start, start + perPage).map((c, i) => {
+                const emoji = EMOJIS.RARITY[c.rarity] || '❓';
+                return `**${start + i + 1}.** ${emoji} **${c.name}**\n└ \`${c.code}\` • ${c.group}`;
+            }).join('\n\n');
+
+            return new EmbedBuilder()
+                .setTitle(`${EMOJIS.COMPUTER} ${interaction.user.username}'s Collection`)
+                .setDescription(list)
+                .setColor('#D2B48C')
+                .setFooter({ text: `Page ${p + 1} of ${totalPages}` });
+        };
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('prev').setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+            new ButtonBuilder().setCustomId('next').setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(totalPages <= 1)
+        );
+
+        await interaction.editReply({ embeds: [generateEmbed(0)], components: [row] });
+    }
+
     // --- ADD CARD ---
-    if (interaction.commandName
+    if (interaction.commandName === 'addcard') {
+        await interaction.deferReply({ ephemeral: true });
+        const idol = interaction.options.getString('idol');
+        const group = interaction.options.getString('group');
+        const rNum = interaction.options.getString('rarity');
+        const era = interaction.options.getString('era');
+        const code = `${group.substring(0,3).toUpperCase()}${idol.substring(0,2).toUpperCase()}#${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const card = { code, name: idol, group, era, rarity: rNum, image: interaction.options.getAttachment('image').url };
+        const cards = readJSON(CARDS_FILE);
+        cards.push(card);
+        fs.writeFileSync(CARDS_FILE, JSON.stringify(cards, null, 2));
+
+        await interaction.editReply(`✅ Added **${idol}**! Code: \`${code}\``);
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
