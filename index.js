@@ -15,7 +15,7 @@ const readJSON = (file) => {
 };
 
 // --- 2. EMOJI FIXED FORMAT ---
-// REPLACE THESE with your full <:name:id> strings from yesterday!
+// I put your IDs in here so the bot actually renders the images!
 const EMOJIS = {
     COMPUTER: '<:YS_COMPUTER:1444114271901450412>',
     BEAN: '<:YS_COFFEEBEAN:1394451580312490035>',
@@ -28,14 +28,13 @@ const EMOJIS = {
     }
 };
 
-// --- 3. INVENTORY WITH PAGES ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // --- INVENTORY WITH PAGES ---
     if (interaction.commandName === 'inventory') {
         const inv = readJSON(INV_FILE);
         const userCards = inv[interaction.user.id] || [];
-
         if (userCards.length === 0) return interaction.reply("Your bag is empty! ☕");
 
         let page = 0;
@@ -76,54 +75,14 @@ client.on('interactionCreate', async interaction => {
         });
     }
 
-    // --- 4. DROP COMMAND (FIXED RECTANGLE) ---
+    // --- DROP COMMAND (BIG RECTANGLE) ---
     if (interaction.commandName === 'drop') {
         const cards = readJSON(CARDS_FILE);
-        if (cards.length < 3) return interaction.reply("Add more cards!");
+        if (cards.length < 3) return interaction.reply("Add more cards first!");
 
-        await interaction.deferReply();
+        await interaction.deferReply(); // STOPS THE "DID NOT RESPOND" ERROR
         const selected = cards.sort(() => 0.5 - Math.random()).slice(0, 3);
 
         const embed = new EmbedBuilder()
             .setTitle('☕ Fresh Cafe Drop!')
-            .setDescription(`1️⃣ ${EMOJIS.RARITY[selected[0].rarity]} **${selected[0].name}**\n2️⃣ ${EMOJIS.RARITY[selected[1].rarity]} **${selected[1].name}**\n3️⃣ ${EMOJIS.RARITY[selected[2].rarity]} **${selected[2].name}**`)
-            .setImage(selected[0].image) // This creates the BIG RECTANGLE box
-            .setColor('#D2B48C')
-            .setFooter({ text: '15 seconds to claim!' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('claim_0').setLabel('1').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('claim_1').setLabel('2').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('claim_2').setLabel('3').setStyle(ButtonStyle.Primary)
-        );
-
-        const msg = await interaction.editReply({ embeds: [embed], components: [row] });
-        const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 15000 });
-        let claims = [null, null, null];
-
-        collector.on('collect', async i => {
-            const idx = parseInt(i.customId.split('_')[1]);
-            if (claims[idx]) return i.reply({ content: "Already taken!", ephemeral: true });
-
-            claims[idx] = i.user;
-            const inv = readJSON(INV_FILE);
-            if (!inv[i.user.id]) inv[i.user.id] = [];
-            inv[i.user.id].push(selected[idx]);
-            fs.writeFileSync(INV_FILE, JSON.stringify(inv, null, 2));
-
-            // Use followUp to prevent "Interaction Failed"
-            await i.reply({ content: `✅ You claimed ${selected[idx].name}!`, ephemeral: true });
-        });
-
-        collector.on('end', async () => {
-            const finalResults = selected.map((card, idx) => {
-                const claimer = claims[idx] ? `<@${claims[idx].id}>` : "*Expired*";
-                return `\`Card • ${idx + 1}\` .\n**${card.name}** [${card.group}] // __${card.code}__   〔 ${EMOJIS.RARITY[card.rarity]} 〕\nEra : ${card.era}\nClaimed by : ${claimer}`;
-            }).join('\n\n');
-
-            await interaction.editReply({ content: finalResults, embeds: [], components: [] });
-        });
-    }
-});
-
-client.login(process.env.DISCORD_TOKEN);
+            .setDescription(`1️⃣ ${EMOJIS.RARITY[selected[0].rarity]} **${selected[0].name}**\n2️⃣ ${EMOJIS.RARITY[selected[1].rarity]} **${selected[1].name}**\n3️⃣ ${
